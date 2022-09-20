@@ -1,0 +1,37 @@
+---
+title: "data_wrangling_I"
+author: "William Anderson"
+date: "2022-09-20"
+output: github_document
+---
+
+
+This is the repo associated with code for lectures in data wrangling in P8105
+
+```{r setup, echo = FALSE, message = FALSE}
+
+library(tidyverse)
+
+```
+
+
+## Data Import CSVs
+
+Let's import data using he 'readr' package
+
+We should always use relative paths
+
+```{r}
+
+litters_data = read_csv(file = "./data_import_examples/FAS_litters.csv")
+
+pups_data = read_csv(file = "./data_import_examples/FAS_pups.csv")
+
+litters_data = janitor::clean_names(litters_data)
+
+names(litters_data)
+
+pups_data = janitor::clean_names(pups_data)
+
+```
+
