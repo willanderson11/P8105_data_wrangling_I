@@ -131,4 +131,12 @@ write_csv(lotr_words, file = "data_import_examples/lotr_words_output.csv")
 
 ```
 
+## Why not base r??? aka don't do this for importing
+
+```{r}
+
+dont_do_this_df = read.csv("data_import_examples/FAS_litters.csv")
+
+```
+
 
