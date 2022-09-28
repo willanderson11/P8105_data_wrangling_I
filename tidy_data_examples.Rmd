@@ -1,0 +1,244 @@
+---
+title: "tidy_data_relational_datasets"
+author: "William Anderson"
+date: "2022-09-28"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+
+options(tibble.print_min = 5)
+
+```
+
+```{r}
+pulse_df = 
+  haven::read_sas("data_import_examples/public_pulse_data.sas7bdat") %>%
+  janitor::clean_names()
+
+
+```
+
+
+Using pivot_longer to fix the bdi columns and put them into one column
+
+```{r}
+pulse_tidy_data = 
+  pivot_longer(
+    
+    pulse_df,
+    
+    bdi_score_bl:bdi_score_12m,
+    
+    names_to = "visit",
+    
+    values_to = "bdi"
+  )
+
+
+```
+
+using pivot_longer to fix visit column and remove bdi_score prefix in each case
+
+```{r}
+pulse_tidy_data = 
+  pivot_longer(
+    
+  pulse_df,
+  
+  bdi_score_bl:bdi_score_12m,
+  
+  names_to = "visit",
+  
+  names_prefix = "bdi_score_",
+  
+  values_to = "bdi"
+)
+
+
+```
+
+But this is tedious and not good practice, instead all of this can be done in one step
+
+```{r}
+
+pulse_df = 
+  haven::read_sas("data_import_examples/public_pulse_data.sas7bdat") %>%
+  janitor::clean_names() %>%
+    pivot_longer(
+      bdi_score_bl:bdi_score_12m,
+      names_to = "visit",
+      names_prefix = "bdi_score_",
+      values_to = "bdi") %>%
+    relocate(visit) %>%
+    mutate(
+      visit = replace(visit, visit == "bl", "00m"),
+      visit = factor(visit)) %>%
+    arrange(id,visit)
+    
+
+  print(pulse_df, n = 12)
+
+
+```
+
+
+
+
+In the litters data, the variables gd0_weight and gd18_weight give the weight of the mother mouse on gestational days 0 and 18. Write a data cleaning chain that retains only litter_number and these columns; produces new variables gd and weight; and makes gd a numeric variable taking values 0 and 18 (for the last part, you might want to use recode)
+
+```{r}
+
+litters_df = 
+  read_csv(file = "data_import_examples/FAS_litters.csv") %>%
+  janitor::clean_names() %>%
+    select(litter_number, ends_with("weight")) %>%
+    pivot_longer(
+      gd0_weight:gd18_weight,
+      names_to = "gd",
+      values_to = "weight") %>%
+  mutate(gd = recode(gd, "gd0_weight" = 0, "gd18_weight" = 18))
+
+
+```
+
+Now we look at untidying the data
+
+The code below creates a tidy dataset that could result from an analysis. This is the correct format for additional analysis or visualization, but doesn’t facilitate quick comparisons for human readers.
+
+```{r}
+analysis_result = tibble(
+  group = c("treatment", "treatment", "placebo", "placebo"),
+  time = c("pre", "post", "pre", "post"),
+  mean = c(4, 8, 3.5, 4)
+)
+
+analysis_result
+
+```
+
+
+An alternative presentation of the same data might have groups in rows, times in columns, and mean values in table cells. This is decidedly non-tidy; to get there from here we’ll need to use pivot_wider, which is the inverse of pivot_longer:
+
+```{r}
+pivot_wider(
+  analysis_result,
+  names_from = "time",
+  values_from = "mean")
+```
+
+Now we look at binding rows where non-tidiness often comes from relevant data spread across multiple tables, in lotr_words.xlsx the word counts for different races and genders in each movie in the trilogy are spread across distinct data rectangles
+
+```{r}
+
+fellowship_ring = 
+  readxl::read_excel("data_import_examples/LotR_Words.xlsx", range = "B3:D6") %>%
+  
+  mutate(movie = "fellowship_ring")
+
+two_towers = 
+  readxl::read_excel("data_import_examples/LotR_Words.xlsx", range = "F3:H6") %>%
+  
+  mutate(movie = "two_towers")
+
+return_king = 
+  readxl::read_excel("data_import_examples/LotR_Words.xlsx", range = "J3:L6") %>%
+  
+  mutate(movie = "return_king")
+
+```
+
+Here it was necessary to add a variable to each dataframe indicating the movie; that information had stored elsewhere in the original spreadshee
+
+
+Once each table is ready to go, we can stack them up using bind_rows and tidy the result:
+
+```{r}
+lotr_tidy = 
+  bind_rows(fellowship_ring, two_towers, return_king) %>%
+  janitor::clean_names() %>%
+  pivot_longer(
+    female:male,
+    names_to = "gender",
+    values_to = "words") %>%
+  mutate(race = str_to_lower(race)) %>%
+  select(movie, everything())
+  
+lotr_tidy
+```
+
+Having the data in this form will make it easier to make comparisons across movies, aggregate within races across the trilogy, and perform other analyses.
+
+Now we move to Joining datsets, Data can be spread across multiple related tables, in which case it is necessary to combine or join them prior to analysis. We’ll focus on the problem of combining two tables only; combining three or more is done step-by-step using the same ideas.
+
+There are four major ways join dataframes x and y:
+
+Inner: keeps data that appear in both x and y
+Left: keeps data that appear in x
+Right: keeps data that appear in y
+Full: keeps data that appear in either x or y
+
+As an example, consider the data tables in FAS_pups.csv and FAS_litters.csv, which are related through the Litter Number variable. The former contains data unique to each pup, and the latter contains data unique to each litter. We can combine these using a left join of litter data into pup data; doing so retains data on each pup and adds data in new columns.
+
+```{r}
+
+
+pup_data = read_csv("data_import_examples/FAS_pups.csv") %>%
+  janitor::clean_names() %>%
+  mutate(
+    sex = recode(sex, `1` = "male", `2` = "female"),
+    sex = factor(sex))
+
+```
+
+```{r}
+litter_data = 
+  read_csv("data_import_examples/FAS_litters.csv") %>%
+  janitor::clean_names() %>%
+  separate(group, into = c("dose", "day_of_tx"), sep = 3) %>%
+  relocate(litter_number) %>%
+  mutate(
+    wt_gain = gd18_weight - gd0_weight,
+    dose = str_to_lower(dose))
+
+```
+
+```{r}
+
+fas_data = 
+  left_join(pup_data, litter_data, by = "litter_number")
+
+fas_data
+```
+
+
+
+
+Write a code chunk that imports and cleans both datasets, and then joins them.
+
+
+```{r}
+survey_os = 
+  read_csv("survey_results/surv_os.csv") %>%
+  janitor::clean_names() %>%
+  rename(id = what_is_your_uni, os = what_operating_system_do_you_use)
+
+
+survey_program = 
+  read_csv("survey_results/surv_program_git.csv") %>%
+  janitor::clean_names() %>%
+  rename(
+    id = what_is_your_uni,
+    prog = what_is_your_degree_program,
+    git_exp = which_most_accurately_describes_your_experience_with_git)
+
+
+left_join(survey_os, survey_program)
+inner_join(survey_os, survey_program)
+anti_join(survey_program, survey_os)
+total_survey = full_join(survey_os, survey_program)
+```
+
+
+
